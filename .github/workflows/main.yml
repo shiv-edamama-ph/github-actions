@@ -28,10 +28,9 @@ jobs:
       - name: Build APK
         run: flutter build apk
 
-      - name: Build iOS without code signing
-        run: flutter build ios
-        env:
-          CI: true
+      - name: Build IPA
+        run:
+          flutter build ipa --no-codesign
 
       # Additional steps like testing, code analysis, etc. can be added here
 
