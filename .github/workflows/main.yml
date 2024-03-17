@@ -29,7 +29,7 @@ jobs:
         run: flutter build apk
 
       - name: Build iOS without code signing
-        run: flutter build ios --no-codesign
+        run: flutter build ios
         env:
           CI: true
 
