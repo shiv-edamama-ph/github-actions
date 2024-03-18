@@ -1,91 +1,63 @@
-name: Flutter CI/CD
+name: "Build and Deploy to Firebase and Testflight"
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
-  build:
-    name: Build Android and iOS
+  build-apk-and-deploy-to-firebase:
+    name: "Build APK and Deploy to Firebase"
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v2
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.16.0' # Specify the Flutter version here
+          flutter-version: '2.x'
 
-      - name: Install dependencies
+      - name: Get dependencies
         run: flutter pub get
 
       - name: Build APK
-        run: flutter build apk
+        run: |
+          VERSION=$(grep -i -e "version: " pubspec.yaml | awk '{print $2}')
+          VERSION_CODE=$(echo "${GITHUB_RUN_NUMBER}000" | cut -d '.' -f 1)
+          echo "VERSION=$VERSION"
+          echo "VERSION_CODE=$VERSION_CODE"
+          flutter build apk --release --build-name=$VERSION --build-number=$VERSION_CODE
 
-      - name: Build IPA
-        run:
-          flutter build ipa --no-codesign
+      - name: Deploy to Firebase
+        run: |
+          cd android
+          bundle install
+          bundle exec fastlane deploy_to_firebase
 
-      # Additional steps like testing, code analysis, etc. can be added here
-
-      - name: Archive artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: build-output
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            build/ios/Runner.app
-
-  deploy:
-    name: Deploy to GitHub Releases
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
+  build-ipa-and-deploy-to-testflight:
+    name: "Build IPA and Deploy to Testflight"
+    runs-on: macos-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Download artifacts
-        uses: actions/download-artifact@v2
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          name: build-output
+          flutter-version: '2.x'
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
+      - name: Get dependencies
+        run: flutter pub get
 
-      - name: Upload APK
-        id: upload_apk
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: build-output/app-release.apk
-          asset_name: app-release.apk
-          asset_content_type: application/vnd.android.package-archive
+      - name: Build IPA
+        run: |
+          VERSION=$(grep -i -e "version: " pubspec.yaml | awk '{print $2}')
+          BUILD_NUMBER=$(expr ${GITHUB_RUN_NUMBER} + 1)
+          echo "VERSION=$VERSION"
+          echo "BUILD_NUMBER=$BUILD_NUMBER"
+          flutter build ios --release --build-name=$VERSION --build-number=$BUILD_NUMBER
 
-      - name: Upload iOS build
-        id: upload_ios
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: build-output/Runner.app
-          asset_name: Runner.app
-          asset_content_type: application/octet-stream
+      - name: Deploy to Testflight
+        run: |
+          cd ios
+          bundle install
+          bundle exec fastlane deploy_to_testflight
